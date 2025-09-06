@@ -4,7 +4,7 @@
 */
 
 import React from 'react';
-import { useAppState } from '../state/appState';
+import { useStore } from '../state/store';
 import { MagicWandIcon, PaintBrushIcon, PaletteIcon, CropIcon, SunIcon, FilterIcon, StyleIcon } from './icons';
 
 type Tool = 'generate' | 'retouch' | 'colorize' | 'adjust' | 'filters' | 'crop' | 'style';
@@ -17,8 +17,7 @@ interface ToolConfig {
 }
 
 const Toolbar: React.FC = () => {
-    const { state, dispatch } = useAppState();
-    const { activeTool, historyIndex } = state;
+    const { activeTool, historyIndex, setActiveTool } = useStore();
 
     const hasImage = historyIndex > -1;
 
@@ -34,7 +33,7 @@ const Toolbar: React.FC = () => {
 
     const handleToolSelect = (tool: Tool) => {
         if (tool !== 'generate' && !hasImage) return;
-        dispatch({ type: 'SET_ACTIVE_TOOL', payload: tool });
+        setActiveTool(tool);
     };
 
     return (

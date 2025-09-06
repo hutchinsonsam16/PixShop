@@ -5,13 +5,11 @@
 
 import React from 'react';
 import { PaletteIcon } from './icons';
+import { useStore } from '../state/store';
 
-interface ColorizePanelProps {
-  onApplyColorize: () => void;
-  isLoading: boolean;
-}
-
-const ColorizePanel: React.FC<ColorizePanelProps> = ({ onApplyColorize, isLoading }) => {
+const ColorizePanel: React.FC = () => {
+  const { isLoading, handleApplyColorize } = useStore();
+  
   return (
     <div className="w-full flex flex-col items-center gap-4">
         <PaletteIcon className="w-8 h-8 text-cyan-400" />
@@ -21,7 +19,7 @@ const ColorizePanel: React.FC<ColorizePanelProps> = ({ onApplyColorize, isLoadin
       </p>
       
       <button
-          onClick={onApplyColorize}
+          onClick={handleApplyColorize}
           className="w-full mt-2 bg-gradient-to-br from-blue-600 to-cyan-500 text-white font-bold py-3 px-8 text-base rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-cyan-500/20 hover:shadow-xl hover:shadow-cyan-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner disabled:from-gray-600 disabled:to-gray-500 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
           disabled={isLoading}
       >

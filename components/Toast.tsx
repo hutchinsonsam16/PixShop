@@ -4,21 +4,20 @@
 */
 
 import React, { useEffect } from 'react';
-import { useAppState } from '../state/appState';
+import { useStore } from '../state/store';
 import { CloseIcon } from './icons';
 
 const Toast: React.FC = () => {
-    const { state, dispatch } = useAppState();
-    const { error } = state;
+    const { error, setError } = useStore();
 
     useEffect(() => {
         if (error) {
             const timer = setTimeout(() => {
-                dispatch({ type: 'SET_ERROR', payload: null });
+                setError(null);
             }, 6000);
             return () => clearTimeout(timer);
         }
-    }, [error, dispatch]);
+    }, [error, setError]);
 
     if (!error) {
         return null;
@@ -32,7 +31,7 @@ const Toast: React.FC = () => {
             <div className="flex items-start">
                 <div className="flex-shrink-0">
                     {/* Alert Icon */}
-                    <svg className="w-6 h-6 text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-6 h-6 text-red-300" fill="none" viewBox="0 0 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </div>
@@ -42,7 +41,7 @@ const Toast: React.FC = () => {
                 </div>
                 <div className="ml-4 flex-shrink-0 flex">
                     <button
-                        onClick={() => dispatch({ type: 'SET_ERROR', payload: null })}
+                        onClick={() => setError(null)}
                         className="inline-flex text-red-300 rounded-md p-1 hover:bg-red-700/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-red-800 focus:ring-white"
                         aria-label="Dismiss"
                     >

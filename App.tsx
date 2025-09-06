@@ -7,7 +7,7 @@ import React, { useRef, useCallback } from 'react';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
-import { useAppState, useActions } from './state/appState';
+import { useStore } from './state/store';
 import Header from './components/Header';
 import Spinner from './components/Spinner';
 import EmptyEditorState from './components/EmptyEditorState';
@@ -18,13 +18,12 @@ import Toast from './components/Toast';
 import { UndoIcon, RedoIcon, EyeIcon } from './components/icons';
 
 const ActionBar: React.FC = () => {
-    const { state, dispatch } = useAppState();
-    const { history, historyIndex } = state;
+    const { history, historyIndex, undo, redo, resetHistory, resetState, setIsComparing } = useStore();
     const canUndo = historyIndex > 0;
     const canRedo = historyIndex < history.length - 1;
 
     const handleDownload = useCallback(() => {
-      const currentImage = state.history[state.historyIndex]?.file;
+      const currentImage = useStore.getState().history[useStore.getState().historyIndex]?.file;
       if (currentImage) {
           const link = document.createElement('a');
           link.href = URL.createObjectURL(currentImage);
@@ -34,43 +33,37 @@ const ActionBar: React.FC = () => {
           document.body.removeChild(link);
           URL.revokeObjectURL(link.href);
       }
-    }, [state.history, state.historyIndex]);
+    }, []);
 
     return (
         <div className="flex flex-wrap items-center justify-center gap-2 p-2 bg-gray-900/50 border-b border-gray-700/50 backdrop-blur-sm">
-            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
-            <button onClick={() => dispatch({ type: 'UNDO' })} disabled={!canUndo} className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Undo"> <UndoIcon className="w-5 h-5 mr-2" /> Undo </button>
-            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
-            <button onClick={() => dispatch({ type: 'REDO' })} disabled={!canRedo} className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Redo"> <RedoIcon className="w-5 h-5 mr-2" /> Redo </button>
+            <button onClick={undo} disabled={!canUndo} className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Undo"> <UndoIcon className="w-5 h-5 mr-2" /> Undo </button>
+            <button onClick={redo} disabled={!canRedo} className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Redo"> <RedoIcon className="w-5 h-5 mr-2" /> Redo </button>
             <div className="h-6 w-px bg-gray-600 mx-1 hidden sm:block"></div>
             {canUndo && (
                 <button
-                    onMouseDown={() => dispatch({ type: 'SET_IS_COMPARING', payload: true })}
-                    onMouseUp={() => dispatch({ type: 'SET_IS_COMPARING', payload: false })}
-                    onMouseLeave={() => dispatch({ type: 'SET_IS_COMPARING', payload: false })}
-                    onTouchStart={() => dispatch({ type: 'SET_IS_COMPARING', payload: true })}
-                    onTouchEnd={() => dispatch({ type: 'SET_IS_COMPARING', payload: false })}
-                    // FIX: Replaced styled-jsx class with Tailwind CSS
+                    onMouseDown={() => setIsComparing(true)}
+                    onMouseUp={() => setIsComparing(false)}
+                    onMouseLeave={() => setIsComparing(false)}
+                    onTouchStart={() => setIsComparing(true)}
+                    onTouchEnd={() => setIsComparing(false)}
                     className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Compare with original"
                 >
                     <EyeIcon className="w-5 h-5 mr-2" /> Compare
                 </button>
             )}
-            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
-            <button onClick={() => dispatch({ type: 'RESET_HISTORY' })} disabled={!canUndo} className="flex items-center justify-center bg-transparent border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"> Reset </button>
+            <button onClick={resetHistory} disabled={!canUndo} className="flex items-center justify-center bg-transparent border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"> Reset </button>
             <div className="flex-grow"></div>
-            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
-            <button onClick={() => dispatch({ type: 'RESET_STATE' })} className="flex items-center justify-center bg-transparent border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"> Upload New </button>
+            <button onClick={resetState} className="flex items-center justify-center bg-transparent border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"> Upload New </button>
             <button onClick={handleDownload} disabled={history.length === 0} className="ml-2 bg-gradient-to-br from-green-600 to-green-500 text-white font-bold py-2 px-4 rounded-md transition-all duration-300 ease-in-out shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-500 disabled:shadow-none disabled:transform-none"> Download Image </button>
         </div>
     );
 };
 
 const App: React.FC = () => {
-    const { state, dispatch } = useAppState();
-    const { handleImageUpload } = useActions();
-    const { history, historyIndex, isLoading, activeTool, isComparing, crop, aspect, displayHotspot } = state;
+    const { history, historyIndex, isLoading, activeTool, isComparing, crop, aspect, displayHotspot } = useStore();
+    const { handleImageUpload, setHotspot, setCrop, setCompletedCrop } = useStore();
     
     const imgRef = useRef<HTMLImageElement>(null);
     
@@ -89,12 +82,9 @@ const App: React.FC = () => {
         const scaleX = naturalWidth / clientWidth;
         const scaleY = naturalHeight / clientHeight;
 
-        dispatch({
-            type: 'SET_HOTSPOT',
-            payload: {
-                display: { x: offsetX, y: offsetY },
-                edit: { x: Math.round(offsetX * scaleX), y: Math.round(offsetY * scaleY) }
-            }
+        setHotspot({
+            display: { x: offsetX, y: offsetY },
+            edit: { x: Math.round(offsetX * scaleX), y: Math.round(offsetY * scaleY) }
         });
     };
 
@@ -116,8 +106,8 @@ const App: React.FC = () => {
                     {activeTool === 'crop' ? (
                         <ReactCrop 
                             crop={crop} 
-                            onChange={c => dispatch({ type: 'SET_CROP', payload: c })} 
-                            onComplete={c => dispatch({ type: 'SET_COMPLETED_CROP', payload: c })}
+                            onChange={c => setCrop(c)} 
+                            onComplete={c => setCompletedCrop(c)}
                             aspect={aspect}
                             className="max-h-full"
                         >

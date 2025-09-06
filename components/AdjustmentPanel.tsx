@@ -3,17 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState } from 'react';
+import React from 'react';
+import { useStore } from '../state/store';
 
-interface AdjustmentPanelProps {
-  onApplyAdjustment: (prompt: string) => void;
-  isLoading: boolean;
-}
-
-const AdjustmentPanel: React.FC<AdjustmentPanelProps> = ({ onApplyAdjustment, isLoading }) => {
-  const [selectedPresetPrompt, setSelectedPresetPrompt] = useState<string | null>(null);
-  const [customPrompt, setCustomPrompt] = useState('');
-
+const AdjustmentPanel: React.FC = () => {
+  const { isLoading, adjustmentPrompt, setAdjustmentPrompt, handleApplyAdjustment } = useStore();
+  
   const presets = [
     { name: 'Blur Background', prompt: 'Apply a realistic depth-of-field effect, making the background blurry while keeping the main subject in sharp focus.' },
     { name: 'Enhance Details', prompt: 'Slightly enhance the sharpness and details of the image without making it look unnatural.' },
@@ -21,22 +16,8 @@ const AdjustmentPanel: React.FC<AdjustmentPanelProps> = ({ onApplyAdjustment, is
     { name: 'Studio Light', prompt: 'Add dramatic, professional studio lighting to the main subject.' },
   ];
 
-  const activePrompt = selectedPresetPrompt || customPrompt;
-
   const handlePresetClick = (prompt: string) => {
-    setSelectedPresetPrompt(prompt);
-    setCustomPrompt('');
-  };
-
-  const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomPrompt(e.target.value);
-    setSelectedPresetPrompt(null);
-  };
-
-  const handleApply = () => {
-    if (activePrompt) {
-      onApplyAdjustment(activePrompt);
-    }
+    setAdjustmentPrompt(prompt);
   };
 
   return (
@@ -49,7 +30,7 @@ const AdjustmentPanel: React.FC<AdjustmentPanelProps> = ({ onApplyAdjustment, is
             key={preset.name}
             onClick={() => handlePresetClick(preset.prompt)}
             disabled={isLoading}
-            className={`w-full text-center bg-white/5 border border-transparent text-gray-300 font-semibold py-2 px-3 rounded-md transition-all duration-200 ease-in-out hover:bg-white/10 hover:border-white/20 active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${selectedPresetPrompt === preset.prompt ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-blue-500 bg-white/10' : ''}`}
+            className={`w-full text-center bg-white/5 border border-transparent text-gray-300 font-semibold py-2 px-3 rounded-md transition-all duration-200 ease-in-out hover:bg-white/10 hover:border-white/20 active:scale-95 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${adjustmentPrompt === preset.prompt ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-blue-500 bg-white/10' : ''}`}
           >
             {preset.name}
           </button>
@@ -58,17 +39,17 @@ const AdjustmentPanel: React.FC<AdjustmentPanelProps> = ({ onApplyAdjustment, is
 
       <input
         type="text"
-        value={customPrompt}
-        onChange={handleCustomChange}
+        value={adjustmentPrompt}
+        onChange={(e) => setAdjustmentPrompt(e.target.value)}
         placeholder="Or describe an adjustment..."
         className="flex-grow bg-gray-800 border border-gray-600 text-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition w-full disabled:cursor-not-allowed disabled:opacity-60 text-base"
         disabled={isLoading}
       />
 
       <button
-          onClick={handleApply}
+          onClick={handleApplyAdjustment}
           className="w-full bg-gradient-to-br from-blue-600 to-blue-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner text-base disabled:from-gray-600 disabled:to-gray-500 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
-          disabled={isLoading || !activePrompt?.trim()}
+          disabled={isLoading || !adjustmentPrompt.trim()}
       >
           Apply Adjustment
       </button>

@@ -13,10 +13,7 @@ export default defineConfig(() => {
     // This is needed for electron-builder to correctly package the app
     // and for Capacitor to find the assets.
     base: './',
-    define: {
-      // The API key is sourced from the environment and made available to the client-side code,
-      // adhering to the guideline of using process.env.API_KEY in the source.
-      'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
-    }
+    // The API key is no longer directly exposed to the client.
+    // All API calls will be proxied through a secure backend (BFF).
   };
 });

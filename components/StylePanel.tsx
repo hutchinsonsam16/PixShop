@@ -3,25 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { UploadIcon, CloseIcon } from './icons';
-import { useAppState } from '../state/appState';
+import { useStore } from '../state/store';
 
-interface StylePanelProps {
-  onApplyStyle: () => void;
-  isLoading: boolean;
-  styleImage: File | null;
-  setStyleImage: (file: File | null) => void;
-}
-
-const StylePanel: React.FC<StylePanelProps> = ({ onApplyStyle, isLoading, styleImage, setStyleImage }) => {
-  const { state } = useAppState();
-  const { styleImageUrl } = state;
+const StylePanel: React.FC = () => {
+  const { isLoading, styleImage, styleImageUrl, handleApplyStyle, handleSetStyleImage } = useStore();
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const handleFileSelect = (files: FileList | null) => {
     if (files && files[0]) {
-      setStyleImage(files[0]);
+      handleSetStyleImage(files[0]);
     }
   };
 
@@ -58,7 +50,7 @@ const StylePanel: React.FC<StylePanelProps> = ({ onApplyStyle, isLoading, styleI
         <div className="relative w-32 h-32 rounded-lg overflow-hidden shadow-lg">
             <img src={styleImageUrl} alt="Style reference" className="w-full h-full object-cover" />
             <button
-                onClick={() => setStyleImage(null)}
+                onClick={() => handleSetStyleImage(null)}
                 className="absolute top-1 right-1 bg-black/60 rounded-full p-1 text-white hover:bg-black/80 transition-all active:scale-90"
                 aria-label="Remove style image"
                 disabled={isLoading}
@@ -69,7 +61,7 @@ const StylePanel: React.FC<StylePanelProps> = ({ onApplyStyle, isLoading, styleI
       )}
 
       <button
-        onClick={onApplyStyle}
+        onClick={handleApplyStyle}
         disabled={isLoading || !styleImage}
         className="w-full mt-2 bg-gradient-to-br from-blue-600 to-blue-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner text-base disabled:from-gray-600 disabled:to-gray-500 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
       >

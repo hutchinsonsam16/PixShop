@@ -4,11 +4,10 @@
 */
 
 import React from 'react';
-import { useAppState } from '../state/appState';
+import { useStore } from '../state/store';
 
 const LayersPanel: React.FC = () => {
-    const { state, dispatch } = useAppState();
-    const { history, historyIndex } = state;
+    const { history, historyIndex, setHistoryIndex } = useStore();
 
     if (history.length === 0) {
         return <div className="p-4 text-center text-gray-500 text-sm">No image loaded. Upload an image to start.</div>;
@@ -21,7 +20,7 @@ const LayersPanel: React.FC = () => {
                 {history.map((item, index) => (
                     <li key={item.id}>
                         <button
-                            onClick={() => dispatch({ type: 'SET_HISTORY_INDEX', payload: index })}
+                            onClick={() => setHistoryIndex(index)}
                             className={`w-full flex items-center gap-3 p-2 rounded-md text-left transition-colors duration-200 ${
                                 index === historyIndex
                                     ? 'bg-blue-500/20'

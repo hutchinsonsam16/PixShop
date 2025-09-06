@@ -3,23 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState } from 'react';
-
-interface CropPanelProps {
-  onApplyCrop: () => void;
-  onSetAspect: (aspect: number | undefined) => void;
-  isLoading: boolean;
-  isCropping: boolean;
-}
+import React from 'react';
+import { useStore } from '../state/store';
 
 type AspectRatio = 'free' | '1:1' | '16:9';
 
-const CropPanel: React.FC<CropPanelProps> = ({ onApplyCrop, onSetAspect, isLoading, isCropping }) => {
-  const [activeAspect, setActiveAspect] = useState<AspectRatio>('free');
+const CropPanel: React.FC = () => {
+  const { isLoading, completedCrop, aspect, setAspect, handleApplyCrop } = useStore();
   
-  const handleAspectChange = (aspect: AspectRatio, value: number | undefined) => {
-    setActiveAspect(aspect);
-    onSetAspect(value);
+  const handleAspectChange = (aspectValue: number | undefined) => {
+    setAspect(aspectValue);
   }
 
   const aspects: { name: AspectRatio, value: number | undefined }[] = [
@@ -38,10 +31,10 @@ const CropPanel: React.FC<CropPanelProps> = ({ onApplyCrop, onSetAspect, isLoadi
         {aspects.map(({ name, value }) => (
           <button
             key={name}
-            onClick={() => handleAspectChange(name, value)}
+            onClick={() => handleAspectChange(value)}
             disabled={isLoading}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all duration-200 active:scale-95 disabled:opacity-50 ${
-              activeAspect === name 
+              aspect === value 
               ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/20' 
               : 'bg-white/10 hover:bg-white/20 text-gray-200'
             }`}
@@ -52,8 +45,8 @@ const CropPanel: React.FC<CropPanelProps> = ({ onApplyCrop, onSetAspect, isLoadi
       </div>
 
       <button
-        onClick={onApplyCrop}
-        disabled={isLoading || !isCropping}
+        onClick={handleApplyCrop}
+        disabled={isLoading || !completedCrop || completedCrop.width === 0}
         className="w-full mt-2 bg-gradient-to-br from-green-600 to-green-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner text-base disabled:from-gray-600 disabled:to-gray-500 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
       >
         Apply Crop
