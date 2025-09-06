@@ -6,7 +6,8 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
-import { generateEditedImage, generateFilteredImage, generateAdjustedImage, generateStyledImage, generateImageFromPrompt } from './services/geminiService';
+import 'react-image-crop/dist/ReactCrop.css';
+import { generateEditedImage, generateFilteredImage, generateAdjustedImage, generateStyledImage, generateImageFromPrompt, generateColorizedImage } from './services/geminiService';
 import Header from './components/Header';
 import Spinner from './components/Spinner';
 import FilterPanel from './components/FilterPanel';
@@ -16,25 +17,16 @@ import StylePanel from './components/StylePanel';
 import { UndoIcon, RedoIcon, EyeIcon } from './components/icons';
 import EmptyEditorState from './components/EmptyEditorState';
 import GeneratePanel from './components/GeneratePanel';
+import ColorizePanel from './components/ColorizePanel';
 
 // Helper to convert a data URL string to a File object
-const dataURLtoFile = (dataurl: string, filename: string): File => {
-    const arr = dataurl.split(',');
-    if (arr.length < 2) throw new Error("Invalid data URL");
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    if (!mimeMatch || !mimeMatch[1]) throw new Error("Could not parse MIME type from data URL");
-
-    const mime = mimeMatch[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while(n--){
-        u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new File([u8arr], filename, {type:mime});
+const dataURLtoFile = async (dataurl: string, filename:string): Promise<File> => {
+    const res = await fetch(dataurl);
+    const blob = await res.blob();
+    return new File([blob], filename, { type: blob.type });
 }
 
-type Tab = 'generate' | 'retouch' | 'adjust' | 'filters' | 'crop' | 'style';
+type Tab = 'generate' | 'retouch' | 'colorize' | 'adjust' | 'filters' | 'crop' | 'style';
 
 const App: React.FC = () => {
   const [history, setHistory] = useState<File[]>([]);
@@ -52,6 +44,10 @@ const App: React.FC = () => {
   const [isComparing, setIsComparing] = useState<boolean>(false);
   const [styleImage, setStyleImage] = useState<File | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  const [hoverPosition, setHoverPosition] = useState<{ x: number, y: number } | null>(null);
+  const MAGNIFIER_SIZE = 150;
+  const MAGNIFIER_ZOOM = 2.5;
 
   const currentImage = history[historyIndex] ?? null;
   const originalImage = history[0] ?? null;
@@ -128,7 +124,7 @@ const App: React.FC = () => {
     
     try {
         const editedImageUrl = await generateEditedImage(currentImage, prompt, editHotspot);
-        const newImageFile = dataURLtoFile(editedImageUrl, `edited-${Date.now()}.png`);
+        const newImageFile = await dataURLtoFile(editedImageUrl, `edited-${Date.now()}.png`);
         addImageToHistory(newImageFile);
         setEditHotspot(null);
         setDisplayHotspot(null);
@@ -147,7 +143,7 @@ const App: React.FC = () => {
     
     try {
         const generatedImageUrl = await generateImageFromPrompt(generationPrompt);
-        const newImageFile = dataURLtoFile(generatedImageUrl, `generated-${Date.now()}.png`);
+        const newImageFile = await dataURLtoFile(generatedImageUrl, `generated-${Date.now()}.png`);
         
         // Reset history with the new image
         setHistory([newImageFile]);
@@ -183,7 +179,7 @@ const App: React.FC = () => {
     
     try {
         const filteredImageUrl = await generateFilteredImage(currentImage, filterPrompt);
-        const newImageFile = dataURLtoFile(filteredImageUrl, `filtered-${Date.now()}.png`);
+        const newImageFile = await dataURLtoFile(filteredImageUrl, `filtered-${Date.now()}.png`);
         addImageToHistory(newImageFile);
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
@@ -205,11 +201,33 @@ const App: React.FC = () => {
     
     try {
         const adjustedImageUrl = await generateAdjustedImage(currentImage, adjustmentPrompt);
-        const newImageFile = dataURLtoFile(adjustedImageUrl, `adjusted-${Date.now()}.png`);
+        const newImageFile = await dataURLtoFile(adjustedImageUrl, `adjusted-${Date.now()}.png`);
         addImageToHistory(newImageFile);
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         setError(`Failed to apply the adjustment. ${errorMessage}`);
+        console.error(err);
+    } finally {
+        setIsLoading(false);
+    }
+  }, [currentImage, addImageToHistory]);
+
+  const handleApplyColorize = useCallback(async () => {
+    if (!currentImage) {
+      setError('No image loaded to colorize.');
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+        const colorizedImageUrl = await generateColorizedImage(currentImage);
+        const newImageFile = await dataURLtoFile(colorizedImageUrl, `colorized-${Date.now()}.png`);
+        addImageToHistory(newImageFile);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError(`Failed to colorize the image. ${errorMessage}`);
         console.error(err);
     } finally {
         setIsLoading(false);
@@ -227,7 +245,7 @@ const App: React.FC = () => {
     
     try {
         const styledImageUrl = await generateStyledImage(currentImage, styleImage);
-        const newImageFile = dataURLtoFile(styledImageUrl, `styled-${Date.now()}.png`);
+        const newImageFile = await dataURLtoFile(styledImageUrl, `styled-${Date.now()}.png`);
         addImageToHistory(newImageFile);
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
@@ -238,7 +256,7 @@ const App: React.FC = () => {
     }
   }, [currentImage, styleImage, addImageToHistory]);
 
-  const handleApplyCrop = useCallback(() => {
+  const handleApplyCrop = useCallback(async () => {
     if (!completedCrop || !imgRef.current) {
         setError('Please select an area to crop.');
         return;
@@ -277,7 +295,7 @@ const App: React.FC = () => {
     );
     
     const croppedImageUrl = canvas.toDataURL('image/png');
-    const newImageFile = dataURLtoFile(croppedImageUrl, `cropped-${Date.now()}.png`);
+    const newImageFile = await dataURLtoFile(croppedImageUrl, `cropped-${Date.now()}.png`);
     addImageToHistory(newImageFile);
 
   }, [completedCrop, addImageToHistory]);
@@ -336,11 +354,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (activeTab !== 'retouch') return;
+  const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeTab !== 'retouch' || !imgRef.current) return;
     
-    const img = e.currentTarget;
-    const rect = img.getBoundingClientRect();
+    const img = imgRef.current;
+    const rect = e.currentTarget.getBoundingClientRect();
 
     const offsetX = e.clientX - rect.left;
     const offsetY = e.clientY - rect.top;
@@ -355,7 +373,20 @@ const App: React.FC = () => {
     const originalY = Math.round(offsetY * scaleY);
 
     setEditHotspot({ x: originalX, y: originalY });
-};
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (activeTab !== 'retouch' || !imgRef.current) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      setHoverPosition({ x, y });
+  };
+
+  const handleMouseLeave = () => {
+      setHoverPosition(null);
+  };
+
 
   const renderImageDisplay = () => (
       <div className="relative w-full shadow-2xl rounded-xl overflow-hidden bg-black/20">
@@ -383,7 +414,12 @@ const App: React.FC = () => {
               />
             </ReactCrop>
           ) : (
-            <div className="relative">
+            <div 
+              className={`relative ${activeTab === 'retouch' ? 'cursor-crosshair' : ''}`}
+              onMouseMove={handleMouseMove} 
+              onMouseLeave={handleMouseLeave}
+              onClick={handleImageClick}
+            >
               {originalImageUrl && (
                   <img
                       key={originalImageUrl}
@@ -397,9 +433,24 @@ const App: React.FC = () => {
                   key={currentImageUrl}
                   src={currentImageUrl!}
                   alt="Current"
-                  onClick={handleImageClick}
-                  className={`absolute top-0 left-0 w-full h-auto object-contain max-h-[60vh] rounded-xl transition-opacity duration-200 ease-in-out ${isComparing ? 'opacity-0' : 'opacity-100'} ${activeTab === 'retouch' ? 'cursor-crosshair' : ''}`}
+                  className={`absolute top-0 left-0 w-full h-auto object-contain max-h-[60vh] rounded-xl transition-opacity duration-200 ease-in-out ${isComparing ? 'opacity-0' : 'opacity-100'}`}
               />
+              {hoverPosition && activeTab === 'retouch' && !displayHotspot && imgRef.current && (
+                <div
+                    className="absolute rounded-full border-2 border-white/80 shadow-2xl pointer-events-none bg-center"
+                    style={{
+                        left: `${hoverPosition.x}px`,
+                        top: `${hoverPosition.y}px`,
+                        width: `${MAGNIFIER_SIZE}px`,
+                        height: `${MAGNIFIER_SIZE}px`,
+                        transform: 'translate(-50%, -50%)',
+                        backgroundImage: `url(${currentImageUrl})`,
+                        backgroundSize: `${imgRef.current.clientWidth * MAGNIFIER_ZOOM}px ${imgRef.current.clientHeight * MAGNIFIER_ZOOM}px`,
+                        backgroundPosition: `-${hoverPosition.x * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2}px -${hoverPosition.y * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2}px`,
+                        zIndex: 20,
+                    }}
+                />
+              )}
             </div>
           )}
 
@@ -433,12 +484,12 @@ const App: React.FC = () => {
       <main className="flex-grow w-full max-w-[1600px] mx-auto p-4 md:p-8 flex justify-center items-start">
         <div className="w-full max-w-4xl mx-auto flex flex-col items-center gap-6">
             
-            <div className="w-full bg-gray-800/80 border border-gray-700/80 rounded-lg p-2 flex items-center justify-center gap-2 backdrop-blur-sm">
-                {(['generate', 'retouch', 'crop', 'adjust', 'filters', 'style'] as Tab[]).map(tab => (
+            <div className="w-full bg-gray-800/80 border border-gray-700/80 rounded-lg p-2 flex items-center justify-center gap-1 backdrop-blur-sm">
+                {(['generate', 'retouch', 'colorize', 'crop', 'adjust', 'filters', 'style'] as Tab[]).map(tab => (
                      <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`w-full capitalize font-semibold py-3 px-5 rounded-md transition-all duration-200 text-base ${
+                        className={`w-full capitalize font-semibold py-3 px-4 rounded-md transition-all duration-200 text-base ${
                             activeTab === tab 
                             ? 'bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-lg shadow-cyan-500/40' 
                             : 'text-gray-300 hover:text-white hover:bg-white/10'
@@ -488,6 +539,7 @@ const App: React.FC = () => {
                             </form>
                         </div>
                     )}
+                    {activeTab === 'colorize' && <ColorizePanel onApplyColorize={handleApplyColorize} isLoading={isLoading} />}
                     {activeTab === 'crop' && <CropPanel onApplyCrop={handleApplyCrop} onSetAspect={setAspect} isLoading={isLoading} isCropping={!!completedCrop?.width && completedCrop.width > 0} />}
                     {activeTab === 'adjust' && <AdjustmentPanel onApplyAdjustment={handleApplyAdjustment} isLoading={isLoading} />}
                     {activeTab === 'filters' && <FilterPanel onApplyFilter={handleApplyFilter} isLoading={isLoading} />}

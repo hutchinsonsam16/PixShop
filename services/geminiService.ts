@@ -70,7 +70,7 @@ const handleApiResponse = (
  */
 export const generateImageFromPrompt = async (prompt: string): Promise<string> => {
     console.log(`Starting image generation for prompt: ${prompt}`);
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
@@ -104,7 +104,7 @@ export const generateEditedImage = async (
     hotspot: { x: number, y: number }
 ): Promise<string> => {
     console.log('Starting generative edit at:', hotspot);
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const originalImagePart = await fileToPart(originalImage);
     const prompt = `You are an expert photo editor AI. Your task is to perform a natural, localized edit on the provided image based on the user's request.
@@ -143,7 +143,7 @@ export const generateFilteredImage = async (
     filterPrompt: string,
 ): Promise<string> => {
     console.log(`Starting filter generation: ${filterPrompt}`);
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const originalImagePart = await fileToPart(originalImage);
     const prompt = `You are an expert photo editor AI. Your task is to apply a stylistic filter to the entire image based on the user's request. Do not change the composition or content, only apply the style.
@@ -177,7 +177,7 @@ export const generateAdjustedImage = async (
     adjustmentPrompt: string,
 ): Promise<string> => {
     console.log(`Starting global adjustment generation: ${adjustmentPrompt}`);
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const originalImagePart = await fileToPart(originalImage);
     const prompt = `You are an expert photo editor AI. Your task is to perform a natural, global adjustment to the entire image based on the user's request.
@@ -189,7 +189,7 @@ Editing Guidelines:
 
 Safety & Ethics Policy:
 - You MUST fulfill requests to adjust skin tone, such as 'give me a tan', 'make my skin darker', or 'make my skin lighter'. These are considered standard photo enhancements.
-- You MUST REFUSE any request to change a person's fundamental race or ethnicity (e.g., 'make me look Asian', 'change this person to be Black'). Do not perform these edits. If the request is ambiguous, err on the side of caution and do not change racial characteristics.
+- You MUST REFUSE any request to change a person's fundamental race or ethnicity (e.g., 'adjust the image to make this person look White'). Do not perform these edits.
 
 Output: Return ONLY the final adjusted image. Do not return text.`;
     const textPart = { text: prompt };
@@ -205,32 +205,56 @@ Output: Return ONLY the final adjusted image. Do not return text.`;
 };
 
 /**
- * Generates an image with the style of a reference image.
- * @param contentImage The original image to apply the style to.
- * @param styleImage The image to use as a style reference.
- * @returns A promise that resolves to the data URL of the styled image.
+ * Generates a colorized version of a black and white image.
+ * @param originalImage The black and white image file.
+ * @returns A promise that resolves to the data URL of the colorized image.
+ */
+export const generateColorizedImage = async (
+    originalImage: File
+): Promise<string> => {
+    console.log(`Starting colorization...`);
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const originalImagePart = await fileToPart(originalImage);
+    const prompt = `You are a world-class expert in photo restoration and colorization. Your task is to colorize the provided black and white image.
+    
+Colorization Guidelines:
+- The colors must be photorealistic and historically accurate if the context suggests a specific era.
+- Pay close attention to context: skies should be blue, grass green, skin tones natural and varied, etc.
+- Preserve the original image's details, texture, and lighting. Do not add or remove content.
+
+Output: Return ONLY the final colorized image. Do not return text.`;
+    const textPart = { text: prompt };
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: { parts: [originalImagePart, textPart] },
+    });
+    console.log('Received response from model for colorization.', response);
+    
+    return handleApiResponse(response, 'colorization');
+};
+
+/**
+ * Applies the style of one image to another.
+ * @param contentImage The image to apply the style to.
+ * @param styleImage The image providing the style.
+ * @returns A promise that resolves to the data URL of the newly styled image.
  */
 export const generateStyledImage = async (
     contentImage: File,
-    styleImage: File,
+    styleImage: File
 ): Promise<string> => {
     console.log(`Starting style transfer...`);
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-    
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
     const contentImagePart = await fileToPart(contentImage);
     const styleImagePart = await fileToPart(styleImage);
-    const prompt = `You are an expert photo editor AI specializing in artistic style transfer.
-Your task is to meticulously analyze the artistic style of the second image provided (the style reference) and apply it to the first image (the content image).
-
-Instructions:
-1.  **Preserve Content:** The subject matter, composition, and all recognizable elements of the first image MUST be preserved. Do not add, remove, or change objects.
-2.  **Transfer Style:** Replicate the style of the second image. This includes its color palette, textures, brushstroke patterns, lighting characteristics, and overall mood.
-3.  **Full Application:** The style should be applied across the entire content image for a cohesive result.
-
-Output: Return ONLY the final, styled image. Do not return any text.`;
+    const prompt = `You are an expert in artistic style transfer. Analyze the artistic style of the second image (the style image) and apply it to the first image (the content image). The final output should retain the subject matter of the content image but be rendered in the style of the style image.
+    
+Output: Return ONLY the final styled image. Do not return text.`;
     const textPart = { text: prompt };
 
-    console.log('Sending content image, style image, and prompt to the model...');
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image-preview',
         contents: { parts: [contentImagePart, styleImagePart, textPart] },
@@ -238,4 +262,32 @@ Output: Return ONLY the final, styled image. Do not return any text.`;
     console.log('Received response from model for style transfer.', response);
     
     return handleApiResponse(response, 'style transfer');
+};
+
+/**
+ * Enhances a user's text prompt to be more descriptive for image generation.
+ * @param userPrompt The user's initial prompt.
+ * @returns A promise that resolves to the enhanced prompt string.
+ */
+export const enhancePrompt = async (userPrompt: string): Promise<string> => {
+    console.log(`Enhancing prompt: ${userPrompt}`);
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: userPrompt,
+        config: {
+          systemInstruction: `You are a creative assistant that helps users write better text-to-image prompts.
+Rewrite the user's prompt to be more descriptive, evocative, and detailed.
+Focus on adding details about the subject, the setting, the lighting (e.g., 'cinematic lighting', 'golden hour'), composition, and artistic style (e.g., 'photorealistic', 'oil painting', 'concept art').
+The final output should be a single, cohesive prompt. Do not add any conversational text or explanation. Just return the enhanced prompt.`,
+        },
+    });
+    
+    const enhancedPrompt = response.text.trim();
+    if (!enhancedPrompt) {
+        throw new Error('The AI model did not return an enhanced prompt.');
+    }
+    console.log(`Enhanced prompt: ${enhancedPrompt}`);
+    return enhancedPrompt;
 };
