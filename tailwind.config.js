@@ -4,6 +4,7 @@ export default {
     "./index.html",
     "./*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
+    "./state/**/*.{ts,tsx}",
   ],
   theme: {
     extend: {},

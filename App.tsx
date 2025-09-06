@@ -3,340 +3,28 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
+import React, { useRef, useCallback } from 'react';
+import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { generateEditedImage, generateFilteredImage, generateAdjustedImage, generateStyledImage, generateImageFromPrompt, generateColorizedImage } from './services/geminiService';
+
+import { useAppState, useActions } from './state/appState';
 import Header from './components/Header';
 import Spinner from './components/Spinner';
-import FilterPanel from './components/FilterPanel';
-import AdjustmentPanel from './components/AdjustmentPanel';
-import CropPanel from './components/CropPanel';
-import StylePanel from './components/StylePanel';
-import { UndoIcon, RedoIcon, EyeIcon } from './components/icons';
 import EmptyEditorState from './components/EmptyEditorState';
-import GeneratePanel from './components/GeneratePanel';
-import ColorizePanel from './components/ColorizePanel';
+import Toolbar from './components/Toolbar';
+import Sidebar from './components/Sidebar';
+import Toast from './components/Toast';
 
-// Helper to convert a data URL string to a File object
-const dataURLtoFile = async (dataurl: string, filename:string): Promise<File> => {
-    const res = await fetch(dataurl);
-    const blob = await res.blob();
-    return new File([blob], filename, { type: blob.type });
-}
+import { UndoIcon, RedoIcon, EyeIcon } from './components/icons';
 
-type Tab = 'generate' | 'retouch' | 'colorize' | 'adjust' | 'filters' | 'crop' | 'style';
+const ActionBar: React.FC = () => {
+    const { state, dispatch } = useAppState();
+    const { history, historyIndex } = state;
+    const canUndo = historyIndex > 0;
+    const canRedo = historyIndex < history.length - 1;
 
-const App: React.FC = () => {
-  const [history, setHistory] = useState<File[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [prompt, setPrompt] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [editHotspot, setEditHotspot] = useState<{ x: number, y: number } | null>(null);
-  const [displayHotspot, setDisplayHotspot] = useState<{ x: number, y: number } | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('generate');
-  
-  const [crop, setCrop] = useState<Crop>();
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
-  const [aspect, setAspect] = useState<number | undefined>();
-  const [isComparing, setIsComparing] = useState<boolean>(false);
-  const [styleImage, setStyleImage] = useState<File | null>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  const [hoverPosition, setHoverPosition] = useState<{ x: number, y: number } | null>(null);
-  const MAGNIFIER_SIZE = 150;
-  const MAGNIFIER_ZOOM = 2.5;
-
-  const currentImage = history[historyIndex] ?? null;
-  const originalImage = history[0] ?? null;
-
-  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
-  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
-
-  // Effect to create and revoke object URLs safely for the current image
-  useEffect(() => {
-    if (currentImage) {
-      const url = URL.createObjectURL(currentImage);
-      setCurrentImageUrl(url);
-      return () => URL.revokeObjectURL(url);
-    } else {
-      setCurrentImageUrl(null);
-    }
-  }, [currentImage]);
-  
-  // Effect to create and revoke object URLs safely for the original image
-  useEffect(() => {
-    if (originalImage) {
-      const url = URL.createObjectURL(originalImage);
-      setOriginalImageUrl(url);
-      return () => URL.revokeObjectURL(url);
-    } else {
-      setOriginalImageUrl(null);
-    }
-  }, [originalImage]);
-
-
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex < history.length - 1;
-
-  const addImageToHistory = useCallback((newImageFile: File) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newImageFile);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-    // Reset transient states after an action
-    setCrop(undefined);
-    setCompletedCrop(undefined);
-  }, [history, historyIndex]);
-
-  const handleImageUpload = useCallback((file: File) => {
-    setError(null);
-    setHistory([file]);
-    setHistoryIndex(0);
-    setEditHotspot(null);
-    setDisplayHotspot(null);
-    setActiveTab('retouch');
-    setCrop(undefined);
-    setCompletedCrop(undefined);
-    setStyleImage(null);
-  }, []);
-
-  const handleGenerate = useCallback(async () => {
-    if (!currentImage) {
-      setError('No image loaded to edit.');
-      return;
-    }
-    
-    if (!prompt.trim()) {
-        setError('Please enter a description for your edit.');
-        return;
-    }
-
-    if (!editHotspot) {
-        setError('Please click on the image to select an area to edit.');
-        return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-        const editedImageUrl = await generateEditedImage(currentImage, prompt, editHotspot);
-        const newImageFile = await dataURLtoFile(editedImageUrl, `edited-${Date.now()}.png`);
-        addImageToHistory(newImageFile);
-        setEditHotspot(null);
-        setDisplayHotspot(null);
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError(`Failed to generate the image. ${errorMessage}`);
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [currentImage, prompt, editHotspot, addImageToHistory]);
-
-  const handleGenerateImageFromPrompt = useCallback(async (generationPrompt: string) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-        const generatedImageUrl = await generateImageFromPrompt(generationPrompt);
-        const newImageFile = await dataURLtoFile(generatedImageUrl, `generated-${Date.now()}.png`);
-        
-        // Reset history with the new image
-        setHistory([newImageFile]);
-        setHistoryIndex(0);
-        
-        // Reset all editing states
-        setPrompt('');
-        setEditHotspot(null);
-        setDisplayHotspot(null);
-        setCrop(undefined);
-        setCompletedCrop(undefined);
-        setStyleImage(null);
-
-        // Switch to editor view
-        setActiveTab('retouch');
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError(`Failed to generate the image. ${errorMessage}`);
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  }, []);
-  
-  const handleApplyFilter = useCallback(async (filterPrompt: string) => {
-    if (!currentImage) {
-      setError('No image loaded to apply a filter to.');
-      return;
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-        const filteredImageUrl = await generateFilteredImage(currentImage, filterPrompt);
-        const newImageFile = await dataURLtoFile(filteredImageUrl, `filtered-${Date.now()}.png`);
-        addImageToHistory(newImageFile);
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError(`Failed to apply the filter. ${errorMessage}`);
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [currentImage, addImageToHistory]);
-  
-  const handleApplyAdjustment = useCallback(async (adjustmentPrompt: string) => {
-    if (!currentImage) {
-      setError('No image loaded to apply an adjustment to.');
-      return;
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-        const adjustedImageUrl = await generateAdjustedImage(currentImage, adjustmentPrompt);
-        const newImageFile = await dataURLtoFile(adjustedImageUrl, `adjusted-${Date.now()}.png`);
-        addImageToHistory(newImageFile);
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError(`Failed to apply the adjustment. ${errorMessage}`);
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [currentImage, addImageToHistory]);
-
-  const handleApplyColorize = useCallback(async () => {
-    if (!currentImage) {
-      setError('No image loaded to colorize.');
-      return;
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-        const colorizedImageUrl = await generateColorizedImage(currentImage);
-        const newImageFile = await dataURLtoFile(colorizedImageUrl, `colorized-${Date.now()}.png`);
-        addImageToHistory(newImageFile);
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError(`Failed to colorize the image. ${errorMessage}`);
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [currentImage, addImageToHistory]);
-
-  const handleApplyStyle = useCallback(async () => {
-    if (!currentImage || !styleImage) {
-        setError('Please load a content image and a style reference image.');
-        return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-        const styledImageUrl = await generateStyledImage(currentImage, styleImage);
-        const newImageFile = await dataURLtoFile(styledImageUrl, `styled-${Date.now()}.png`);
-        addImageToHistory(newImageFile);
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        setError(`Failed to apply the style. ${errorMessage}`);
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [currentImage, styleImage, addImageToHistory]);
-
-  const handleApplyCrop = useCallback(async () => {
-    if (!completedCrop || !imgRef.current) {
-        setError('Please select an area to crop.');
-        return;
-    }
-
-    const image = imgRef.current;
-    const canvas = document.createElement('canvas');
-    const scaleX = image.naturalWidth / image.width;
-    const scaleY = image.naturalHeight / image.height;
-    
-    canvas.width = completedCrop.width;
-    canvas.height = completedCrop.height;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-        setError('Could not process the crop.');
-        return;
-    }
-
-    const pixelRatio = window.devicePixelRatio || 1;
-    canvas.width = completedCrop.width * pixelRatio;
-    canvas.height = completedCrop.height * pixelRatio;
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    ctx.imageSmoothingQuality = 'high';
-
-    ctx.drawImage(
-      image,
-      completedCrop.x * scaleX,
-      completedCrop.y * scaleY,
-      completedCrop.width * scaleX,
-      completedCrop.height * scaleY,
-      0,
-      0,
-      completedCrop.width,
-      completedCrop.height,
-    );
-    
-    const croppedImageUrl = canvas.toDataURL('image/png');
-    const newImageFile = await dataURLtoFile(croppedImageUrl, `cropped-${Date.now()}.png`);
-    addImageToHistory(newImageFile);
-
-  }, [completedCrop, addImageToHistory]);
-
-  const handleUndo = useCallback(() => {
-    if (canUndo) {
-      setHistoryIndex(historyIndex - 1);
-      setEditHotspot(null);
-      setDisplayHotspot(null);
-    }
-  }, [canUndo, historyIndex]);
-  
-  const handleRedo = useCallback(() => {
-    if (canRedo) {
-      setHistoryIndex(historyIndex + 1);
-      setEditHotspot(null);
-      setDisplayHotspot(null);
-    }
-  }, [canRedo, historyIndex]);
-
-  const handleReset = useCallback(() => {
-    if (history.length > 0) {
-      setHistoryIndex(0);
-      setError(null);
-      setEditHotspot(null);
-      setDisplayHotspot(null);
-    }
-  }, [history]);
-
-  const handleUploadNew = useCallback(() => {
-      setHistory([]);
-      setHistoryIndex(-1);
-      setError(null);
-      setPrompt('');
-      setEditHotspot(null);
-      setDisplayHotspot(null);
-      setStyleImage(null);
-      setActiveTab('generate');
-  }, []);
-
-  const handleDownload = useCallback(() => {
+    const handleDownload = useCallback(() => {
+      const currentImage = state.history[state.historyIndex]?.file;
       if (currentImage) {
           const link = document.createElement('a');
           link.href = URL.createObjectURL(currentImage);
@@ -346,270 +34,129 @@ const App: React.FC = () => {
           document.body.removeChild(link);
           URL.revokeObjectURL(link.href);
       }
-  }, [currentImage]);
-  
-  const handleFileSelect = (files: FileList | null) => {
-    if (files && files[0]) {
-      handleImageUpload(files[0]);
-    }
-  };
+    }, [state.history, state.historyIndex]);
 
-  const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (activeTab !== 'retouch' || !imgRef.current) return;
-    
-    const img = imgRef.current;
-    const rect = e.currentTarget.getBoundingClientRect();
-
-    const offsetX = e.clientX - rect.left;
-    const offsetY = e.clientY - rect.top;
-    
-    setDisplayHotspot({ x: offsetX, y: offsetY });
-
-    const { naturalWidth, naturalHeight, clientWidth, clientHeight } = img;
-    const scaleX = naturalWidth / clientWidth;
-    const scaleY = naturalHeight / clientHeight;
-
-    const originalX = Math.round(offsetX * scaleX);
-    const originalY = Math.round(offsetY * scaleY);
-
-    setEditHotspot({ x: originalX, y: originalY });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-      if (activeTab !== 'retouch' || !imgRef.current) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      setHoverPosition({ x, y });
-  };
-
-  const handleMouseLeave = () => {
-      setHoverPosition(null);
-  };
-
-
-  const renderImageDisplay = () => (
-      <div className="relative w-full shadow-2xl rounded-xl overflow-hidden bg-black/20">
-          {isLoading && (
-              <div className="absolute inset-0 bg-black/70 z-30 flex flex-col items-center justify-center gap-4 animate-fade-in">
-                  <Spinner />
-                  <p className="text-gray-300">AI is working its magic...</p>
-              </div>
-          )}
-          
-          {activeTab === 'crop' ? (
-            <ReactCrop 
-              crop={crop} 
-              onChange={c => setCrop(c)} 
-              onComplete={c => setCompletedCrop(c)}
-              aspect={aspect}
-              className="max-h-[60vh]"
-            >
-              <img 
-                ref={imgRef}
-                key={`crop-${currentImageUrl}`}
-                src={currentImageUrl!} 
-                alt="Crop this image"
-                className="w-full h-auto object-contain max-h-[60vh] rounded-xl"
-              />
-            </ReactCrop>
-          ) : (
-            <div 
-              className={`relative ${activeTab === 'retouch' ? 'cursor-crosshair' : ''}`}
-              onMouseMove={handleMouseMove} 
-              onMouseLeave={handleMouseLeave}
-              onClick={handleImageClick}
-            >
-              {originalImageUrl && (
-                  <img
-                      key={originalImageUrl}
-                      src={originalImageUrl}
-                      alt="Original"
-                      className="w-full h-auto object-contain max-h-[60vh] rounded-xl pointer-events-none"
-                  />
-              )}
-              <img
-                  ref={imgRef}
-                  key={currentImageUrl}
-                  src={currentImageUrl!}
-                  alt="Current"
-                  className={`absolute top-0 left-0 w-full h-auto object-contain max-h-[60vh] rounded-xl transition-opacity duration-200 ease-in-out ${isComparing ? 'opacity-0' : 'opacity-100'}`}
-              />
-              {hoverPosition && activeTab === 'retouch' && !displayHotspot && imgRef.current && (
-                <div
-                    className="absolute rounded-full border-2 border-white/80 shadow-2xl pointer-events-none bg-center"
-                    style={{
-                        left: `${hoverPosition.x}px`,
-                        top: `${hoverPosition.y}px`,
-                        width: `${MAGNIFIER_SIZE}px`,
-                        height: `${MAGNIFIER_SIZE}px`,
-                        transform: 'translate(-50%, -50%)',
-                        backgroundImage: `url(${currentImageUrl})`,
-                        backgroundSize: `${imgRef.current.clientWidth * MAGNIFIER_ZOOM}px ${imgRef.current.clientHeight * MAGNIFIER_ZOOM}px`,
-                        backgroundPosition: `-${hoverPosition.x * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2}px -${hoverPosition.y * MAGNIFIER_ZOOM - MAGNIFIER_SIZE / 2}px`,
-                        zIndex: 20,
-                    }}
-                />
-              )}
-            </div>
-          )}
-
-          {displayHotspot && !isLoading && activeTab === 'retouch' && (
-              <div 
-                  className="absolute rounded-full w-6 h-6 bg-blue-500/50 border-2 border-white pointer-events-none -translate-x-1/2 -translate-y-1/2 z-10"
-                  style={{ left: `${displayHotspot.x}px`, top: `${displayHotspot.y}px` }}
-              >
-                  <div className="absolute inset-0 rounded-full w-6 h-6 animate-ping bg-blue-400"></div>
-              </div>
-          )}
-      </div>
-  );
-  
-  const renderError = () => (
-     <div className="text-center animate-fade-in bg-red-500/10 border border-red-500/20 p-8 rounded-lg max-w-2xl mx-auto flex flex-col items-center gap-4">
-      <h2 className="text-2xl font-bold text-red-300">An Error Occurred</h2>
-      <p className="text-md text-red-400">{error}</p>
-      <button
-          onClick={() => setError(null)}
-          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg text-md transition-colors"
-        >
-          Try Again
-      </button>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen text-gray-100 flex flex-col">
-      <Header />
-      <main className="flex-grow w-full max-w-[1600px] mx-auto p-4 md:p-8 flex justify-center items-start">
-        <div className="w-full max-w-4xl mx-auto flex flex-col items-center gap-6">
-            
-            <div className="w-full bg-gray-800/80 border border-gray-700/80 rounded-lg p-2 flex items-center justify-center gap-1 backdrop-blur-sm">
-                {(['generate', 'retouch', 'colorize', 'crop', 'adjust', 'filters', 'style'] as Tab[]).map(tab => (
-                     <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`w-full capitalize font-semibold py-3 px-4 rounded-md transition-all duration-200 text-base ${
-                            activeTab === tab 
-                            ? 'bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-lg shadow-cyan-500/40' 
-                            : 'text-gray-300 hover:text-white hover:bg-white/10'
-                        }`}
-                    >
-                        {tab}
-                    </button>
-                ))}
-            </div>
-
-            {error && renderError()}
-
-            {!error && activeTab === 'generate' && (
-              <GeneratePanel onGenerate={handleGenerateImageFromPrompt} isLoading={isLoading} />
+    return (
+        <div className="flex flex-wrap items-center justify-center gap-2 p-2 bg-gray-900/50 border-b border-gray-700/50 backdrop-blur-sm">
+            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
+            <button onClick={() => dispatch({ type: 'UNDO' })} disabled={!canUndo} className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Undo"> <UndoIcon className="w-5 h-5 mr-2" /> Undo </button>
+            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
+            <button onClick={() => dispatch({ type: 'REDO' })} disabled={!canRedo} className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Redo"> <RedoIcon className="w-5 h-5 mr-2" /> Redo </button>
+            <div className="h-6 w-px bg-gray-600 mx-1 hidden sm:block"></div>
+            {canUndo && (
+                <button
+                    onMouseDown={() => dispatch({ type: 'SET_IS_COMPARING', payload: true })}
+                    onMouseUp={() => dispatch({ type: 'SET_IS_COMPARING', payload: false })}
+                    onMouseLeave={() => dispatch({ type: 'SET_IS_COMPARING', payload: false })}
+                    onTouchStart={() => dispatch({ type: 'SET_IS_COMPARING', payload: true })}
+                    onTouchEnd={() => dispatch({ type: 'SET_IS_COMPARING', payload: false })}
+                    // FIX: Replaced styled-jsx class with Tailwind CSS
+                    className="flex items-center justify-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Compare with original"
+                >
+                    <EyeIcon className="w-5 h-5 mr-2" /> Compare
+                </button>
             )}
-            
-            {!error && activeTab !== 'generate' && !currentImageUrl && (
-              <EmptyEditorState onFileSelect={handleFileSelect} />
-            )}
+            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
+            <button onClick={() => dispatch({ type: 'RESET_HISTORY' })} disabled={!canUndo} className="flex items-center justify-center bg-transparent border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"> Reset </button>
+            <div className="flex-grow"></div>
+            {/* FIX: Replaced styled-jsx class with Tailwind CSS */}
+            <button onClick={() => dispatch({ type: 'RESET_STATE' })} className="flex items-center justify-center bg-transparent border border-white/20 text-gray-200 font-semibold py-2 px-4 rounded-md transition-all duration-200 ease-in-out text-sm hover:bg-white/20 hover:border-white/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"> Upload New </button>
+            <button onClick={handleDownload} disabled={history.length === 0} className="ml-2 bg-gradient-to-br from-green-600 to-green-500 text-white font-bold py-2 px-4 rounded-md transition-all duration-300 ease-in-out shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-500 disabled:shadow-none disabled:transform-none"> Download Image </button>
+        </div>
+    );
+};
 
-            {!error && activeTab !== 'generate' && currentImageUrl && (
-              <div className="w-full flex flex-col items-center gap-6 animate-fade-in">
-                {renderImageDisplay()}
-                
-                <div className="w-full">
-                    {activeTab === 'retouch' && (
-                        <div className="flex flex-col items-center gap-4">
-                            <p className="text-md text-gray-400">
-                                {editHotspot ? 'Great! Now describe your localized edit below.' : 'Click an area on the image to make a precise edit.'}
-                            </p>
-                            <form onSubmit={(e) => { e.preventDefault(); handleGenerate(); }} className="w-full flex items-center gap-2">
-                                <input
-                                    type="text"
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    placeholder={editHotspot ? "e.g., 'change my shirt color to blue'" : "First click a point on the image"}
-                                    className="flex-grow bg-gray-800 border border-gray-700 text-gray-200 rounded-lg p-5 text-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition w-full disabled:cursor-not-allowed disabled:opacity-60"
-                                    disabled={isLoading || !editHotspot}
-                                />
-                                <button 
-                                    type="submit"
-                                    className="bg-gradient-to-br from-blue-600 to-blue-500 text-white font-bold py-5 px-8 text-lg rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner disabled:from-blue-800 disabled:to-blue-700 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
-                                    disabled={isLoading || !prompt.trim() || !editHotspot}
-                                >
-                                    Generate
-                                </button>
-                            </form>
+const App: React.FC = () => {
+    const { state, dispatch } = useAppState();
+    const { handleImageUpload } = useActions();
+    const { history, historyIndex, isLoading, activeTool, isComparing, crop, aspect, displayHotspot } = state;
+    
+    const imgRef = useRef<HTMLImageElement>(null);
+    
+    const currentImageItem = history[historyIndex] ?? null;
+    const originalImageItem = history[0] ?? null;
+
+    const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (activeTool !== 'retouch' || !imgRef.current) return;
+        
+        const img = imgRef.current;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left;
+        const offsetY = e.clientY - rect.top;
+        
+        const { naturalWidth, naturalHeight, clientWidth, clientHeight } = img;
+        const scaleX = naturalWidth / clientWidth;
+        const scaleY = naturalHeight / clientHeight;
+
+        dispatch({
+            type: 'SET_HOTSPOT',
+            payload: {
+                display: { x: offsetX, y: offsetY },
+                edit: { x: Math.round(offsetX * scaleX), y: Math.round(offsetY * scaleY) }
+            }
+        });
+    };
+
+    const renderImageDisplay = () => {
+        if (!currentImageItem) {
+            return <EmptyEditorState onFileSelect={(files) => files && handleImageUpload(files[0])} />;
+        }
+
+        return (
+            <div className="relative w-full h-full flex items-center justify-center p-8 bg-black/20">
+                <div className="relative shadow-2xl rounded-xl overflow-hidden max-w-full max-h-full">
+                    {isLoading && (
+                        <div className="absolute inset-0 bg-black/70 z-30 flex flex-col items-center justify-center gap-4 animate-fade-in">
+                            <Spinner />
+                            <p className="text-gray-300">AI is working its magic...</p>
                         </div>
                     )}
-                    {activeTab === 'colorize' && <ColorizePanel onApplyColorize={handleApplyColorize} isLoading={isLoading} />}
-                    {activeTab === 'crop' && <CropPanel onApplyCrop={handleApplyCrop} onSetAspect={setAspect} isLoading={isLoading} isCropping={!!completedCrop?.width && completedCrop.width > 0} />}
-                    {activeTab === 'adjust' && <AdjustmentPanel onApplyAdjustment={handleApplyAdjustment} isLoading={isLoading} />}
-                    {activeTab === 'filters' && <FilterPanel onApplyFilter={handleApplyFilter} isLoading={isLoading} />}
-                    {activeTab === 'style' && <StylePanel onApplyStyle={handleApplyStyle} isLoading={isLoading} styleImage={styleImage} setStyleImage={setStyleImage} />}
-                </div>
-                
-                <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-                    <button 
-                        onClick={handleUndo}
-                        disabled={!canUndo}
-                        className="flex items-center justify-center text-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-3 px-5 rounded-md transition-all duration-200 ease-in-out hover:bg-white/20 hover:border-white/30 active:scale-95 text-base disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-white/5"
-                        aria-label="Undo last action"
-                    >
-                        <UndoIcon className="w-5 h-5 mr-2" />
-                        Undo
-                    </button>
-                    <button 
-                        onClick={handleRedo}
-                        disabled={!canRedo}
-                        className="flex items-center justify-center text-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-3 px-5 rounded-md transition-all duration-200 ease-in-out hover:bg-white/20 hover:border-white/30 active:scale-95 text-base disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-white/5"
-                        aria-label="Redo last action"
-                    >
-                        <RedoIcon className="w-5 h-5 mr-2" />
-                        Redo
-                    </button>
                     
-                    <div className="h-6 w-px bg-gray-600 mx-1 hidden sm:block"></div>
-
-                    {canUndo && (
-                      <button 
-                          onMouseDown={() => setIsComparing(true)}
-                          onMouseUp={() => setIsComparing(false)}
-                          onMouseLeave={() => setIsComparing(false)}
-                          onTouchStart={() => setIsComparing(true)}
-                          onTouchEnd={() => setIsComparing(false)}
-                          className="flex items-center justify-center text-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-3 px-5 rounded-md transition-all duration-200 ease-in-out hover:bg-white/20 hover:border-white/30 active:scale-95 text-base"
-                          aria-label="Press and hold to see original image"
-                      >
-                          <EyeIcon className="w-5 h-5 mr-2" />
-                          Compare
-                      </button>
+                    {activeTool === 'crop' ? (
+                        <ReactCrop 
+                            crop={crop} 
+                            onChange={c => dispatch({ type: 'SET_CROP', payload: c })} 
+                            onComplete={c => dispatch({ type: 'SET_COMPLETED_CROP', payload: c })}
+                            aspect={aspect}
+                            className="max-h-full"
+                        >
+                            <img ref={imgRef} src={currentImageItem.url} alt="Crop this image" className="object-contain max-h-[calc(100vh-200px)]"/>
+                        </ReactCrop>
+                    ) : (
+                        <div className={`relative ${activeTool === 'retouch' ? 'cursor-crosshair' : ''}`} onClick={handleImageClick}>
+                             <img src={originalImageItem.url} alt="Original" className="object-contain max-h-[calc(100vh-200px)] pointer-events-none" />
+                             <img ref={imgRef} src={currentImageItem.url} alt="Current" className={`absolute top-0 left-0 w-full h-full object-contain transition-opacity duration-200 ease-in-out ${isComparing ? 'opacity-0' : 'opacity-100'}`} />
+                        </div>
                     )}
 
-                    <button 
-                        onClick={handleReset}
-                        disabled={!canUndo}
-                        className="text-center bg-transparent border border-white/20 text-gray-200 font-semibold py-3 px-5 rounded-md transition-all duration-200 ease-in-out hover:bg-white/10 hover:border-white/30 active:scale-95 text-base disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent"
-                      >
-                        Reset
-                    </button>
-                    <button 
-                        onClick={handleUploadNew}
-                        className="text-center bg-white/10 border border-white/20 text-gray-200 font-semibold py-3 px-5 rounded-md transition-all duration-200 ease-in-out hover:bg-white/20 hover:border-white/30 active:scale-95 text-base"
-                    >
-                        Upload New
-                    </button>
-
-                    <button 
-                        onClick={handleDownload}
-                        className="flex-grow sm:flex-grow-0 ml-auto bg-gradient-to-br from-green-600 to-green-500 text-white font-bold py-3 px-5 rounded-md transition-all duration-300 ease-in-out shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner text-base"
-                    >
-                        Download Image
-                    </button>
+                    {displayHotspot && !isLoading && activeTool === 'retouch' && (
+                        <div 
+                            className="absolute rounded-full w-6 h-6 bg-blue-500/50 border-2 border-white pointer-events-none -translate-x-1/2 -translate-y-1/2 z-10"
+                            style={{ left: `${displayHotspot.x}px`, top: `${displayHotspot.y}px` }}
+                        >
+                            <div className="absolute inset-0 rounded-full w-6 h-6 animate-ping bg-blue-400"></div>
+                        </div>
+                    )}
                 </div>
-              </div>
-            )}
+            </div>
+        );
+    };
+
+    return (
+        <div className="min-h-screen text-gray-100 flex flex-col bg-gray-800">
+            <Header />
+            <Toast />
+            <div className="flex-grow flex h-[calc(100vh-65px)]">
+                <Toolbar />
+                <main className="flex-grow flex flex-col">
+                    <ActionBar />
+                    {renderImageDisplay()}
+                </main>
+                <Sidebar />
+            </div>
         </div>
-      </main>
-    </div>
-  );
+    );
 };
 
 export default App;
